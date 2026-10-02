@@ -1,0 +1,42 @@
+name: Release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.4 mpv zip
+      - name: Run test suite
+        run: ./test/test.sh
+      - name: Create release archive
+        id: pack
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          ARCHIVE="subsource-mpv-${VERSION}.zip"
+          zip -q "$ARCHIVE" subsource.lua subsource.conf README.md LICENSE scripts/install.sh
+          echo "archive=$ARCHIVE" >> "$GITHUB_OUTPUT"
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" \
+              subsource.lua \
+              subsource.conf \
+              "${{ steps.pack.outputs.archive }}" \
+              --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              subsource.lua \
+              subsource.conf \
+              "${{ steps.pack.outputs.archive }}" \
+              --title "${GITHUB_REF_NAME#v}" --generate-notes
+          fi
